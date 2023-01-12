@@ -2,6 +2,7 @@
   ZXText2P.c - ASCII text file to ZX81 emulator .P file
 
   By Chris Cowley <ccowley@grok.co.uk>
+  Modified by Tom White.
 
   Portions of this code were taken from zmakebas
     (public domain by Russell Marks)
@@ -59,6 +60,7 @@ int UseLabels = FALSE;
 int labelend=0;
 unsigned char labels[MAX_LABELS][MAX_LABEL_LEN+1];
 int label_lines[MAX_LABELS];
+int dfile_collapsed = FALSE;
 unsigned char filebuf[32768];
 unsigned char sysvarbuf[116]; /* Buffer for holding the system variables */
 
@@ -200,8 +202,9 @@ char *tokens[]= {
  */
 void ShowUsage()
 {
-    printf("\nusage: zxtext2p [-h] [-i incr] [-l] [-o output-file] [-s line] [input-file]\n\n");
+    printf("\nusage: zxtext2p [-d] [-h] [-i incr] [-l] [-o output-file] [-s line] [input-file]\n\n");
     
+    printf("        -d      collapse display file (default off).\n");
     printf("        -h      show this help information.\n");
     printf("        -i      in labels mode, set line number increment. (default = 2).\n");
     printf("        -l      use labels rather than line numbers.\n");
@@ -223,8 +226,11 @@ void ParseOptions(int argc,char *argv[])
     opterr=0;
 
     do {
-        switch(getopt(argc,argv,"a:hi:ln:o:rs:"))
+        switch(getopt(argc,argv,"a:dhi:ln:o:rs:"))
         {
+            case 'd': /* collapse display file (off by default) */
+                dfile_collapsed = TRUE;
+                break;
             case 'h':   /* usage help */
                 ShowUsage();
                 exit(1);
@@ -843,7 +849,7 @@ int main(int argc,char *argv[])
     /* DF_CC    - Address of print position in display file */
     sysvarbuf[5]=iTemp & 255;   
     sysvarbuf[6]=iTemp>>8;
-    iTemp += 792; /* iTemp = Address of VARS area */
+    iTemp += dfile_collapsed ? 24 : 792; /* iTemp = Address of VARS area */
     /* VARS     - Address of program variables */
     sysvarbuf[7]=iTemp & 255;
     sysvarbuf[8]=iTemp++>>8;
@@ -898,11 +904,19 @@ int main(int argc,char *argv[])
     /* Write an empty DFILE area */
     memset(sysvarbuf,0,33);
     sysvarbuf[0]=118;
-    sysvarbuf[33]=118;
     fwrite (sysvarbuf,1,1,fOut); /* Initial HALT */
+    if (dfile_collapsed) {
+        sysvarbuf[1]=118;
 
-    for(iTemp=1;iTemp<25;iTemp++)
-        fwrite(&sysvarbuf[1],1,33,fOut); /* 24 lines of D_FILE data */
+        for(iTemp=1;iTemp<25;iTemp++)
+            fwrite(&sysvarbuf[1],1,1,fOut); /* 24 newlines */
+    }
+    else {
+        sysvarbuf[33]=118;
+
+        for(iTemp=1;iTemp<25;iTemp++)
+            fwrite(&sysvarbuf[1],1,33,fOut); /* 24 lines of D_FILE data */
+    }
     
 
     /* Write and empty VARS area */
